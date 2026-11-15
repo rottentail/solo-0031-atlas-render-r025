@@ -98,8 +98,11 @@ class Demo:
             time.sleep(.025)
         raise RuntimeError('render deadline exceeded')
 
-    def submit(self, snapshot, key='render-one', scale=1):
-        return self.call('POST', '/v1/jobs', {'snapshotId': snapshot['id'], 'scale': scale}, 202, {'Idempotency-Key': key})
+    def submit(self, snapshot, key='render-one', scale=1, rendering=None):
+        body = {'snapshotId': snapshot['id'], 'scale': scale}
+        if rendering is not None:
+            body['rendering'] = rendering
+        return self.call('POST', '/v1/jobs', body, 202, {'Idempotency-Key': key})
 
 
 def run(demo, workflow, out):
@@ -147,8 +150,15 @@ def run(demo, workflow, out):
         snapshot = demo.call('POST', '/v1/scenes/emblem/snapshots', {'expectedRevision': current['revision'] + 1}, 201)
     job = demo.submit(snapshot)
     if workflow == 'submit-render':
+        assert job['rendering'] == 'antialias'
         assert demo.submit(snapshot)['id'] == job['id']
         demo.call('POST', '/v1/jobs', {'snapshotId': snapshot['id'], 'scale': 2}, 409, {'Idempotency-Key': 'render-one'})
+        # The rendering selector is request semantics: changing it under the
+        # same idempotency key conflicts, while an unknown value is rejected.
+        demo.call('POST', '/v1/jobs', {'snapshotId': snapshot['id'], 'scale': 1, 'rendering': 'legacy'}, 409, {'Idempotency-Key': 'render-one'})
+        demo.call('POST', '/v1/jobs', {'snapshotId': snapshot['id'], 'scale': 1, 'rendering': 'sketchy'}, 400, {'Idempotency-Key': 'render-bad'})
+        legacy_job = demo.wait(demo.submit(snapshot, 'render-legacy', rendering='legacy')['id'])
+        assert legacy_job['rendering'] == 'legacy'
     if workflow == 'revoke-snapshot':
         demo.call('POST', '/v1/snapshots/' + snapshot['id'] + '/revoke')
         demo.call('POST', '/v1/jobs', {'snapshotId': snapshot['id'], 'scale': 1}, 409, {'Idempotency-Key': 'blocked-after-revoke'})

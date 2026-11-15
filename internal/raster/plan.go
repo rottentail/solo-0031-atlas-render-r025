@@ -24,18 +24,30 @@ type operation struct {
 type Plan struct {
 	Width, Height, Scale int
 	Background           string
+	Rendering            model.Rendering
 	ops                  []operation
 	Cost                 int64
 }
 
+// Compile keeps the historical entry point and selects the default
+// antialiased edge treatment. Callers that must reproduce a stored job's
+// semantics use CompileWithRendering.
 func Compile(s model.Snapshot, scale int) (Plan, error) {
-	if e := scene.Validate(s.Document); e != nil {
+	return CompileWithRendering(s, scale, model.RenderAntialias)
+}
+
+func CompileWithRendering(s model.Snapshot, scale int, rendering model.Rendering) (Plan, error) {
+	mode, e := model.NormalizeRendering(rendering)
+	if e != nil {
+		return Plan{}, e
+	}
+	if e = scene.Validate(s.Document); e != nil {
 		return Plan{}, e
 	}
 	if scale != 1 && scale != 2 {
 		return Plan{}, model.Invalid("scale must be one or two")
 	}
-	p := Plan{Width: s.Document.Width * scale, Height: s.Document.Height * scale, Scale: scale, Background: s.Document.Background}
+	p := Plan{Width: s.Document.Width * scale, Height: s.Document.Height * scale, Scale: scale, Background: s.Document.Background, Rendering: mode}
 	decoded := map[string]image.Image{}
 	var walk func([]model.Layer, geometry.Matrix, []clip, float64) error
 	walk = func(ls []model.Layer, parent geometry.Matrix, clips []clip, alpha float64) error {

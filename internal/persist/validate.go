@@ -45,6 +45,14 @@ func Validate(s model.State) error {
 		if id != j.ID || j.SnapshotID != j.Payload.ID || j.Scale < 1 || j.Scale > 2 || j.Attempt < 1 {
 			return fmt.Errorf("invalid job %s", id)
 		}
+		// Jobs written before the rendering selector default to antialiased
+		// output, so historical state files keep loading.
+		mode, e := model.NormalizeRendering(j.Rendering)
+		if e != nil {
+			return fmt.Errorf("invalid job %s: %w", id, e)
+		}
+		j.Rendering = mode
+		s.Jobs[id] = j
 		if _, ok := s.Snapshots[j.SnapshotID]; !ok {
 			return fmt.Errorf("orphan job %s", id)
 		}

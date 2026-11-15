@@ -8,14 +8,15 @@ import (
 
 func (a API) submit(w http.ResponseWriter, r *http.Request) {
 	var b struct {
-		SnapshotID string `json:"snapshotId"`
-		Scale      int    `json:"scale"`
+		SnapshotID string          `json:"snapshotId"`
+		Scale      int             `json:"scale"`
+		Rendering  model.Rendering `json:"rendering"`
 	}
 	if e := decode(w, r, &b); e != nil {
 		fail(w, e)
 		return
 	}
-	v, e := a.Service.Submit(b.SnapshotID, b.Scale, r.Header.Get("Idempotency-Key"))
+	v, e := a.Service.Submit(b.SnapshotID, b.Scale, b.Rendering, r.Header.Get("Idempotency-Key"))
 	if e != nil {
 		fail(w, e)
 		return

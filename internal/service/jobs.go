@@ -8,13 +8,17 @@ import (
 	"time"
 )
 
-func (s *Service) Submit(snapshotID string, scale int, key string) (model.Job, error) {
+func (s *Service) Submit(snapshotID string, scale int, rendering model.Rendering, key string) (model.Job, error) {
 	var out model.Job
 	if !scene.ValidID(key) {
 		return out, model.Invalid("idempotency key required (1..80 identifier characters)")
 	}
-	fingerprint := model.CanonicalDigest([]any{snapshotID, scale})
-	e := s.Store.Update(func(st *model.State) error {
+	mode, e := model.NormalizeRendering(rendering)
+	if e != nil {
+		return out, e
+	}
+	fingerprint := model.CanonicalDigest([]any{snapshotID, scale, mode})
+	e = s.Store.Update(func(st *model.State) error {
 		if r, ok := st.Receipts[key]; ok {
 			if r.Fingerprint != fingerprint {
 				return model.Conflict("idempotency key used for different request")
@@ -29,7 +33,9 @@ func (s *Service) Submit(snapshotID string, scale int, key string) (model.Job, e
 		if snap.State != "active" {
 			return model.Conflict("snapshot is revoked")
 		}
-		if _, e := raster.Compile(snap, scale); e != nil {
+		// The work-budget and queue gates run for every rendering mode; the
+		// antialiased path never bypasses admission control.
+		if _, e := raster.CompileWithRendering(snap, scale, mode); e != nil {
 			return e
 		}
 		pending := 0
@@ -42,7 +48,7 @@ func (s *Service) Submit(snapshotID string, scale int, key string) (model.Job, e
 			return model.Busy("render queue is full")
 		}
 		now := time.Now().UTC()
-		out = model.Job{ID: model.ID("job", st.Sequence+1), SnapshotID: snapshotID, State: "queued", Scale: scale, Attempt: 1, CreatedAt: now, UpdatedAt: now, Payload: snap}
+		out = model.Job{ID: model.ID("job", st.Sequence+1), SnapshotID: snapshotID, State: "queued", Scale: scale, Rendering: mode, Attempt: 1, CreatedAt: now, UpdatedAt: now, Payload: snap}
 		st.Jobs[out.ID] = out
 		st.Receipts[key] = model.Receipt{Key: key, Fingerprint: fingerprint, JobID: out.ID}
 		st.Emit("job.queued", out.ID)

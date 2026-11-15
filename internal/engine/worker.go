@@ -107,7 +107,7 @@ func (w *Worker) step(parent context.Context) error {
 	if current.State != "running" {
 		cancel()
 	}
-	plan, e := raster.Compile(j.Payload, j.Scale)
+	plan, e := raster.CompileWithRendering(j.Payload, j.Scale, j.Rendering)
 	var data []byte
 	if e == nil {
 		var imgErr error

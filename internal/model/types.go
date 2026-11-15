@@ -10,6 +10,38 @@ import (
 
 const FormatVersion = 1
 
+// Rendering selects the rasterization edge treatment used for a job.
+// Antialias is the default and computes partial coverage across a fixed
+// sub-pixel grid. Legacy reproduces the historical center-point binary
+// coverage output byte for byte, so frozen scenes and stored receipts keep
+// their original semantics.
+type Rendering string
+
+const (
+	RenderAntialias Rendering = "antialias"
+	RenderLegacy    Rendering = "legacy"
+)
+
+// NormalizeRendering maps an unset selector to the default and rejects
+// anything outside the documented vocabulary.
+func NormalizeRendering(r Rendering) (Rendering, error) {
+	switch r {
+	case "":
+		return RenderAntialias, nil
+	case RenderAntialias, RenderLegacy:
+		return r, nil
+	default:
+		return "", Invalid("rendering must be antialias or legacy")
+	}
+}
+
+// DocumentCoverageGrid is the number of deterministic coverage samples per
+// document pixel along one axis. A scale-1 output pixel evaluates the full
+// grid (Grid*Grid samples); a scale-2 output pixel covers half a document
+// pixel and uses (Grid/2)^2. The same document grid drives both scales, so
+// box-averaging four scale-2 pixels equals the scale-1 coverage.
+const DocumentCoverageGrid = 8
+
 type Point struct {
 	X float64 `json:"x"`
 	Y float64 `json:"y"`
@@ -84,6 +116,7 @@ type Job struct {
 	SnapshotID string    `json:"snapshotId"`
 	State      string    `json:"state"`
 	Scale      int       `json:"scale"`
+	Rendering  Rendering `json:"rendering"`
 	Attempt    int       `json:"attempt"`
 	Error      string    `json:"error,omitempty"`
 	ArtifactID string    `json:"artifactId,omitempty"`

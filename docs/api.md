@@ -14,7 +14,7 @@
 | POST /snapshots/{id}/revoke | 无 | state，200 |
 | GET /snapshots/{id}/package | 无 | atlas-scene交换包，200 |
 | POST /imports/{id} | name, package | 新场景，201 |
-| POST /jobs | snapshotId, scale；请求头Idempotency-Key | 任务，202 |
+| POST /jobs | snapshotId, scale，可选rendering；请求头Idempotency-Key | 任务，202 |
 | GET /jobs/{id} | 无 | 任务，200 |
 | POST /jobs/{id}/cancel | 无 | 任务，200 |
 | POST /jobs/{id}/retry | 无 | 任务，202 |
@@ -28,6 +28,8 @@
 
 文档字段：width、height、background、layers。每个图层有id、kind、width、height、transform、opacity、fill；transform包括x、y、scaleX、scaleY、degrees。图层可以有clip（x/y/width/height），group使用children，polygon使用points，image使用assetId。solid颜料有color；linear还包括endColor、from、to。示例是可直接提交的完整请求。
 
-幂等键长度1–80，使用英文字母、数字、下划线和连字符，首位不能是后两者。它在服务实例持久状态中全局生效，不随任务完成、取消、结果清理或进程重启失效。改换请求语义需使用新键。
+幂等键长度1–80，使用英文字母、数字、下划线和连字符，首位不能是后两者。它在服务实例持久状态中全局生效，不随任务完成、取消、结果清理或进程重启失效。改换请求语义需使用新键。请求语义由快照ID、输出倍数和渲染模式共同决定，任一项不同而复用同一键都会返回409。
+
+渲染模式通过`rendering`字段选择，缺省为`antialias`。`antialias`在固定的文档坐标覆盖网格上计算每个输出像素的覆盖率，旋转图形、椭圆、多边形以及嵌套裁剪交界处得到平滑的部分覆盖边缘；scale 1使用8×8文档网格，scale 2每个输出像素使用4×4子网格，两者采样同一文档网格，因此边缘在倍数切换时保持一致。`legacy`逐像素中心点二值判定，逐字节复现历史输出，供需要保留既有像素语义的场景使用。渲染模式随任务持久化，并计入幂等指纹；升级前写入的旧状态文件缺省该字段，加载时按`antialias`处理。
 
 服务接受相同内容的素材重复上传，退役素材不接受重新上传。交换包导出保留快照状态；导入会创建全新的active场景，原快照不作为目标服务中的快照记录落地。导入目标ID必须未使用；共享素材必须内容相同且仍可用。
